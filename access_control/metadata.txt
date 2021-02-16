@@ -1,15 +1,15 @@
 [general]
 name=AccessControl
-description=Access Control
-about=Access Control, based on Alessandro Pasotti's work
+description=Access Control Plugin for QGIS Server
+about=
 server=True
-version=0.0.1
+version=1.0.0
 qgisMinimumVersion=2.99
 qgisMaximumVersion=3.99
-author=Germán Carrillo
-tags=eureka
-homepage=https://github.com/qgisco/
-tracker=https://github.com/qgisco/
-repository=https://github.com/qgisco/
+author=Gautier RINGEISEN
+tags=
+homepage=https://github.com/gautierringeisen/QGIS-Server-Plugin
+tracker=https://github.com/gautierringeisen/QGIS-Server-Plugin
+repository=https://github.com/gautierringeisen/QGIS-Server-Plugin
 experimental=False
 deprecated=False
