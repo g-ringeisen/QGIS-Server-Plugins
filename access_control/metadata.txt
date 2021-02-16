@@ -1,0 +1,15 @@
+[general]
+name=AccessControl
+description=Access Control
+about=Access Control, based on Alessandro Pasotti's work
+server=True
+version=0.0.1
+qgisMinimumVersion=2.99
+qgisMaximumVersion=3.99
+author=Germán Carrillo
+tags=eureka
+homepage=https://github.com/qgisco/
+tracker=https://github.com/qgisco/
+repository=https://github.com/qgisco/
+experimental=False
+deprecated=False
