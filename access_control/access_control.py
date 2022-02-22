@@ -2,6 +2,8 @@ import os
 import time
 import base64
 import psycopg2
+import json
+import jwt
 
 from qgis.core import QgsMessageLog, QgsDataSourceUri
 from qgis.server import QgsAccessControlFilter, QgsServerFilter
@@ -12,30 +14,47 @@ class RestrictedAccessControlWithUsers(QgsAccessControlFilter):
     def __init__(self, server_iface):
         super(QgsAccessControlFilter, self).__init__(server_iface)
         self._permcache = {}
-        
+
     def _get_user(self):
         username = None
-        auth = self.serverInterface().getEnv('HTTP_AUTHORIZATION')
-        if auth:
-            username, password = base64.b64decode(auth[6:]).split(b':')
-            username = username.decode("utf-8")
-        else:
-            username = self.serverInterface().getEnv(user_env_var)
-        
+        QgsMessageLog.logMessage("Headers de la requête vers QGIS Server")
+        QgsMessageLog.logMessage(json.dumps(self.serverInterface().requestHandler().requestHeaders()))
+
+        try:
+            auth = self.serverInterface().getEnv('HTTP_AUTHORIZATION')
+            if auth:
+                if auth.startswith("Bearer "):
+                    decoded = jwt.decode(auth[7:], jwt_secret_key, algorithms=['HS256'])
+                    if decoded and 'sub' in decoded:
+                        username = decoded['sub']
+                        if debug:
+                            QgsMessageLog.logMessage("Use JWT Identity: {}".format(username))
+                elif auth.startswith("Basic "):
+                    username, password = base64.b64decode(auth[6:]).split(b':')
+                    username = username.decode("utf-8")
+                    if debug:
+                        QgsMessageLog.logMessage("User Basic Authentication: {}".format(username))
+            else:
+                username = self.serverInterface().getEnv(user_env_var)
+                if debug:
+                    QgsMessageLog.logMessage("Use env variable {}: {}".format(user_env_var, username))
+        except Exception as e:
+            QgsMessageLog.logMessage("{}".format(e))
+                    
         if username == None or username == "":
+            QgsMessageLog.logMessage("Use default user {}".format(e))
             return default_user;
         return username;
-    
+
     def _get_postgresTablePermissions(self, layer):
         user        = self._get_user()
         uri         = QgsDataSourceUri(layer.source())
         permissions = QgsAccessControlFilter.LayerPermissions()
         cachekey    = "{} {}".format(user, uri.schema())
-        
-        
+
         rolecache = self._permcache.get(cachekey)
         if rolecache == None or time.time() - rolecache.get("_timestamp") > cache_ttl:
-            
+
             if debug:
                 QgsMessageLog.logMessage("No cache available, building new cache for {}".format(cachekey))
 
@@ -52,21 +71,26 @@ class RestrictedAccessControlWithUsers(QgsAccessControlFilter):
                 else:
                     conn = psycopg2.connect(dbname=uri.database(), user=uri.username(), password=uri.password(), host=uri.host(), port=uri.port())
                 
-                curs = conn.cursor()
-                curs.execute(perms_sql, {'user': user, 'schema': uri.schema()})
-                for record in curs:
-                    rolecache[record[0]] = (record[1], record[2], record[3], record[4])
-                self._permcache[cachekey] = rolecache
+                with conn:
+                    dbuser = default_user
+                    # Get the postgres rolename associated to the user
+                    with conn.cursor() as curs:
+                        curs.execute(role_sql, {'user': user})
+                        row = cur.fetchone()
+                        if row:
+                            dbuser = record[0]
+                            
+                    with conn.cursor() as curs:
+                        curs.execute(perms_sql, {'user': dbuser, 'schema': uri.schema()})
+                        for record in curs:
+                            rolecache[record[0]] = (record[1], record[2], record[3], record[4])
+                        self._permcache[cachekey] = rolecache
+                        
             except Exception as e:
                 QgsMessageLog.logMessage("{}".format(e))
                 if debug:
                     raise
-            finally:
-                if curs:
-                    curs.close()
-                if conn:
-                    conn.close()
-            
+
         perms = rolecache.get(uri.table())
         if perms:
             permissions.canRead   = perms[0]
@@ -78,7 +102,7 @@ class RestrictedAccessControlWithUsers(QgsAccessControlFilter):
             permissions.canInsert = False
             permissions.canUpdate = False
             permissions.canDelete = False
-        
+
         if debug:
             QgsMessageLog.logMessage("Permissions for {} on table {} : {}".format(user, uri.table(), perms))
 
@@ -96,7 +120,7 @@ class RestrictedAccessControlWithUsers(QgsAccessControlFilter):
         """ Return the layer rights """
         if layer.providerType() == "postgres":
             return self._get_postgresTablePermissions(layer)
-                
+
         return super(RestrictedAccessControlWithUsers, self).layerPermissions(layer)
 
     def authorizedLayerAttributes(self, layer, attributes):
@@ -111,10 +135,26 @@ class RestrictedAccessControlWithUsers(QgsAccessControlFilter):
         #return self._get_user()
         return super(RestrictedAccessControlWithUsers, self).cacheKey()
 
+class AccessControlFilter(QgsServerFilter):
+    def __init__(self, server_iface):
+        super(QgsServerFilter, self).__init__(server_iface)
+
+    def requestReady(self):
+        QgsMessageLog.logMessage("REQUEST FROM OGC SERVICE HEADERS")
+        QgsMessageLog.logMessage(json.dumps(self.serverInterface().requestHandler().requestHeaders()))
+        QgsMessageLog.logMessage(self.serverInterface().requestHandler().requestHeader('Authorization'))
+        QgsMessageLog.logMessage(self.serverInterface().requestHandler().requestHeader('X-Qgis-Authorization'))
+        QgsMessageLog.logMessage("VAR ENV HTTP AUTHORIZATION")
+        QgsMessageLog.logMessage(self.serverInterface().getEnv('HTTP_AUTHORIZATION'))
+
+    def sendResponse(self):
+        return super(AccessControlFilter, self).sendResponse()
+
+    def responseComplete(self):
+        return super(AccessControlFilter, self).responseComplete()
 
 class AccessControl:
     def __init__(self, serverIface):
         # Save reference to the QGIS server interface
         serverIface.registerAccessControl( RestrictedAccessControlWithUsers(serverIface), 100 )
-
-
+        serverIface.registerFilter(AccessControlFilter(serverIface), 100)
