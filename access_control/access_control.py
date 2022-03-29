@@ -40,11 +40,11 @@ class RestrictedAccessControlWithUsers(QgsAccessControlFilter):
                     QgsMessageLog.logMessage("Use env variable {}: {}".format(user_env_var, username))
         except Exception as e:
             QgsMessageLog.logMessage("{}".format(e))
-                    
+
         if username == None or username == "":
-            QgsMessageLog.logMessage("Use default user {}".format(e))
-            return default_user;
-        return username;
+            QgsMessageLog.logMessage("Use default user {}".format(default_user))
+            return default_user
+        return username
 
     def _get_postgresTablePermissions(self, layer):
         user        = self._get_user()
@@ -70,22 +70,22 @@ class RestrictedAccessControlWithUsers(QgsAccessControlFilter):
                     conn = psycopg2.connect(service=uri.service())
                 else:
                     conn = psycopg2.connect(dbname=uri.database(), user=uri.username(), password=uri.password(), host=uri.host(), port=uri.port())
-                
+
                 with conn:
                     dbuser = default_user
                     # Get the postgres rolename associated to the user
                     with conn.cursor() as curs:
                         curs.execute(role_sql, {'user': user})
-                        row = cur.fetchone()
+                        row = curs.fetchone()
                         if row:
-                            dbuser = record[0]
-                            
+                            dbuser = row[0]
+
                     with conn.cursor() as curs:
                         curs.execute(perms_sql, {'user': dbuser, 'schema': uri.schema()})
                         for record in curs:
                             rolecache[record[0]] = (record[1], record[2], record[3], record[4])
                         self._permcache[cachekey] = rolecache
-                        
+
             except Exception as e:
                 QgsMessageLog.logMessage("{}".format(e))
                 if debug:
@@ -142,8 +142,6 @@ class AccessControlFilter(QgsServerFilter):
     def requestReady(self):
         QgsMessageLog.logMessage("REQUEST FROM OGC SERVICE HEADERS")
         QgsMessageLog.logMessage(json.dumps(self.serverInterface().requestHandler().requestHeaders()))
-        QgsMessageLog.logMessage(self.serverInterface().requestHandler().requestHeader('Authorization'))
-        QgsMessageLog.logMessage(self.serverInterface().requestHandler().requestHeader('X-Qgis-Authorization'))
         QgsMessageLog.logMessage("VAR ENV HTTP AUTHORIZATION")
         QgsMessageLog.logMessage(self.serverInterface().getEnv('HTTP_AUTHORIZATION'))
 

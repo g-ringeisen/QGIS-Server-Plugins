@@ -24,4 +24,4 @@ default_user = 'siglc'
 #    3 - update permission, bool
 #    4 - delete permission, bool
 perms_sql = "SELECT t.tablename, has_table_privilege(%(user)s, t.schemaname || '.' || t.tablename, 'SELECT') as canRead, has_table_privilege(%(user)s, t.schemaname || '.' || t.tablename, 'INSERT') as canInsert, has_table_privilege(%(user)s, t.schemaname || '.' || t.tablename, 'UPDATE') as canUpdate, has_table_privilege(%(user)s, t.schemaname || '.' || t.tablename, 'DELETE') as canDelete FROM pg_catalog.pg_tables t WHERE t.schemaname = %(schema)s"
-user_sql = "SELECT rolname FROM pg_roles WHERE rolname=%(user)s"
+role_sql = "SELECT rolname FROM pg_roles WHERE rolname=%(user)s"
