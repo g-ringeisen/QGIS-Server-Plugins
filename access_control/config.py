@@ -1,3 +1,5 @@
+import os
+
 # Cache duration in seconds
 cache_ttl = 60
 
@@ -5,7 +7,7 @@ cache_ttl = 60
 debug = True
 
 # The Secret Key to decode the JWT in case of Bearer authentication
-jwt_secret_key = '******'
+jwt_secret_key = os.environ.get('JWT_SECRET_KEY', '******')
 
 # The Environement variable that contains the user name (e.g. REMOTE_USER, CAS-User, ...)
 user_env_var = 'REMOTE_USER'
