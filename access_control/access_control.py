@@ -17,18 +17,33 @@ class RestrictedAccessControlWithUsers(QgsAccessControlFilter):
 
     def _get_user(self):
         username = None
-        QgsMessageLog.logMessage("Headers de la requête vers QGIS Server")
-        QgsMessageLog.logMessage(json.dumps(self.serverInterface().requestHandler().requestHeaders()))
+        if debug:
+            QgsMessageLog.logMessage("Headers de la requête vers QGIS Server")
+            QgsMessageLog.logMessage(json.dumps(self.serverInterface().requestHandler().requestHeaders()))
 
         try:
             auth = self.serverInterface().getEnv('HTTP_AUTHORIZATION')
             if auth:
                 if auth.startswith("Bearer "):
-                    decoded = jwt.decode(auth[7:], jwt_secret_key, algorithms=['HS256'])
-                    if decoded and 'sub' in decoded:
-                        username = decoded['sub']
-                        if debug:
-                            QgsMessageLog.logMessage("Use JWT Identity: {}".format(username))
+                    jwt_token = auth[7:]
+                    jwt_header = jwt.get_unverified_header(jwt_token)
+
+                    QgsMessageLog.logMessage("JWT Header: {}".format(jwt_header))
+
+                    if jwks_uri and 'kid' in jwt_header:
+                        jwks_client = jwt.PyJWKClient(jwks_uri)
+                        jwt_public_key = jwks_client.get_signing_key_from_jwt(jwt_token)
+                        decoded = jwt.decode(jwt_token, jwt_public_key.key, algorithms=[jwt_header['alg']], options={"verify_aud": False})
+                        if decoded and 'preferred_username' in decoded:
+                            username = decoded['preferred_username']
+                    else:
+                        decoded = jwt.decode(jwt_token, jwt_secret_key, algorithms=['HS256'])
+                        if decoded and 'sub' in decoded:
+                            username = decoded['sub']
+
+                    if debug:
+                        QgsMessageLog.logMessage("Use JWT Identity: {}".format(username))
+
                 elif auth.startswith("Basic "):
                     username, password = base64.b64decode(auth[6:]).split(b':')
                     username = username.decode("utf-8")
